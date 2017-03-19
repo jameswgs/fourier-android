@@ -6,6 +6,12 @@
 std::vector<float> fourierTransform(const jfloat *samples, jsize numSamples);
 std::vector<float> fourierProject(jfloat *samples, jsize numSamples, jfloat rate, jfloat hz);
 
+float magnitudeOfSummedProjectedVectors(jfloat *pDouble, jsize samples, jfloat rate, jfloat hz);
+
+std::vector<float>
+magnitudesOfSummedProjectedVectors(float *samples, int numSamples, float rate, float *hzArray,
+                                   int numHzBuckets);
+
 extern "C"
 JNIEXPORT jfloatArray JNICALL
 Java_net_slenderloris_fourierandroid_FourierTransform_fourierTransform(JNIEnv *env, jclass type, jfloatArray samples_) {
@@ -41,9 +47,59 @@ std::vector<float> fourierProject(jfloat *samples, jsize numSamples, jfloat rate
     return projection;
 }
 
+float magnitudeOfSummedProjectedVectors(float *samples, int numSamples, float rate, float hz) {
+    auto projected = fourierProject(samples, numSamples, rate, hz);
+    float x = 0;
+    float y = 0;
+    for (int i = 0; i < numSamples; ++i) {
+        x += projected[i*2];
+        y += projected[i*2+1];
+    }
+    return sqrtf(x*x+y*y);
+}
+
+std::vector<float> magnitudesOfSummedProjectedVectors(float *samples, int numSamples, float rate, float *hzArray, int numHzBuckets) {
+    auto frequencies = std::vector<float>();
+    for (int i = 0; i < numHzBuckets; ++i) {
+        float hz = hzArray[i];
+        float magnitude = magnitudeOfSummedProjectedVectors(samples, numSamples, rate, hz);
+        frequencies.push_back(magnitude);
+    }
+    return frequencies;
+}
+
 extern "C"
 JNIEXPORT jfloatArray JNICALL
-Java_net_slenderloris_fourierandroid_FourierTransform_projectAtHz(JNIEnv *env, jclass type, jfloatArray samples_, jfloat rate, jfloat hz) {
+Java_net_slenderloris_fourierandroid_FourierTransform_magnitudesOfSummedProjectedVectors(JNIEnv *env, jclass type, jfloatArray samples_, jfloat rate, jfloatArray hzArray_) {
+    auto *samples = env->GetFloatArrayElements(samples_, NULL);
+    auto numSamples = env->GetArrayLength(samples_);
+    auto *hzArray = env->GetFloatArrayElements(hzArray_, NULL);
+    auto numHzBuckets = env->GetArrayLength(hzArray_);
+
+    std::vector<float> magnitudes = magnitudesOfSummedProjectedVectors(samples, numSamples, rate, hzArray, numHzBuckets);
+
+    auto pArray = env->NewFloatArray((jsize) magnitudes.size());
+    env->SetFloatArrayRegion(pArray, 0, (jsize) magnitudes.size(), magnitudes.data());
+
+    env->ReleaseFloatArrayElements(samples_, samples, 0);
+    env->ReleaseFloatArrayElements(hzArray_, hzArray, 0);
+
+    return pArray;
+}
+
+extern "C"
+JNIEXPORT jfloat JNICALL
+Java_net_slenderloris_fourierandroid_FourierTransform_magnitudeOfSummedProjectedVectors(JNIEnv *env, jclass type, jfloatArray samples_, jfloat rate, jfloat hz) {
+    auto *samples = env->GetFloatArrayElements(samples_, NULL);
+    auto numSamples = env->GetArrayLength(samples_);
+    float magnitude = magnitudeOfSummedProjectedVectors(samples, numSamples, rate, hz);
+    env->ReleaseFloatArrayElements(samples_, samples, 0);
+    return magnitude;
+}
+
+extern "C"
+JNIEXPORT jfloatArray JNICALL
+Java_net_slenderloris_fourierandroid_FourierTransform_project(JNIEnv *env, jclass type, jfloatArray samples_, jfloat rate, jfloat hz) {
     auto *samples = env->GetFloatArrayElements(samples_, NULL);
     auto numSamples = env->GetArrayLength(samples_);
     std::vector<float> projectedPairs = fourierProject(samples, numSamples, rate, hz);
